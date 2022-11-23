@@ -21,6 +21,7 @@ python dump_to_nemo.py --espnet-dump-dir path/to/dir --train-name train_sp --dev
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("formatter from espnet dump to nemo dump")
     parser.add_argument("--espnet-dump-dir")
+    parser.add_argument("--nemo-wav-dir", default="nemo_wav")
     parser.add_argument("--manifests-dir", default="manifests")
 
     parser.add_argument("--train-name", default="train_sp")
@@ -42,7 +43,7 @@ def make_text_dict(line: str):
     return id, {"text": text}
 
 
-def make_wavscp_dict(line: str, espnet_dump_dir: Path):
+def make_wavscp_dict(line: str, espnet_dump_dir: Path, nemo_wav_dir: Path):
     """
     wav.scpの情報を持った辞書型配列を作る
     並列処理
@@ -57,18 +58,30 @@ def make_wavscp_dict(line: str, espnet_dump_dir: Path):
     data, sr = soundfile.read(audio_path)
     duration = len(data) / sr
 
-    ext_dict = {"audio_filepath": str(audio_path), "duration": duration}
+    # fileの置き換え (nemoではwavしか受け付けない)
+    dirs = str(audio_path).split("/")
+    parent = dirs[-2] # format.*
+    filename:str = dirs[-1] # A01F0019_0047680_0054321.flac
+    filename.replace(".flac", ".wav")
+    dist_dir = nemo_wav_dir / parent
+    dist_dir.mkdir(exist_ok=True)
+    new_audio_path = dist_dir / filename
+    soundfile.write(str(new_audio_path), data, sr)
+
+    ext_dict = {"audio_filepath": str(new_audio_path), "duration": duration}
     return id, ext_dict
 
 
-def make_nemo_dump(espnet_dump_dir: str, data_name: str, output_dir: str):
+def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, output_dir: str):
     """
     NeMoを学習させるためのdumpファイルを作成します．
     """
+
     espnet_dump_dir = Path(espnet_dump_dir)
     text_path = espnet_dump_dir / f"raw/{data_name}/text"
     wavscp_path = espnet_dump_dir / f"raw/{data_name}/wav.scp"
     output_json = Path(output_dir) / f"{data_name}_manifest.json/"
+    nemo_wav_dir = Path(nemo_wav_dir)
 
     assert text_path.exists(), f"{text_path.exists()} does not exist"
     assert wavscp_path.exists(), f"{wavscp_path.exists()} does not exist"
@@ -85,7 +98,7 @@ def make_nemo_dump(espnet_dump_dir: str, data_name: str, output_dir: str):
     logging.info("read wav.scp file with parallel")
     with open(wavscp_path) as f_wavscp:
         wavscp_dicts = Parallel(n_jobs=-1)(
-            delayed(make_wavscp_dict)(line, espnet_dump_dir)
+            delayed(make_wavscp_dict)(line, espnet_dump_dir, nemo_wav_dir)
             for line in tqdm(f_wavscp.readlines())
         )
         wavscp_dicts = dict(wavscp_dicts)
@@ -107,29 +120,32 @@ def main():
 
     # params
     espnet_dump_dir = Path(args.espnet_dump_dir)
+    wav_dir = Path(args.nemo_wav_dir)
     manifests_dir = Path(args.manifests_dir)
 
-    nemo_train_dir = manifests_dir / "train"
-    nemo_dev_dir = manifests_dir / "dev"
-    nemo_test_dir = manifests_dir / "test"
-
-    espnet_train_name = args.train_name
-    espnet_dev_name = args.dev_name
-    espnet_test_name = args.test_name
-
+    # ディレクトリ準備
     if manifests_dir.exists():
         shutil.rmtree(manifests_dir)
-    manifests_dir.mkdir(parents=True, exist_ok=True)
+    manifests_dir.mkdir(parents=True)
+    if wav_dir.exists():
+        shutil.rmtree(wav_dir)
+    wav_dir.mkdir(parents=True)
 
-    nemo_train_dir.mkdir(exist_ok=True)
-    nemo_dev_dir.mkdir(exist_ok=True)
-    nemo_test_dir.mkdir(exist_ok=True)
+    # convert処理
+    nemo_data_names = ["train", "dev", "test"]
+    espnet_data_names = [args.train_name, args.dev_name, args.test_name]
 
-    # convert each dump files
-    make_nemo_dump(espnet_dump_dir, espnet_train_name, nemo_train_dir)
-    make_nemo_dump(espnet_dump_dir, espnet_dev_name, nemo_dev_dir)
-    make_nemo_dump(espnet_dump_dir, espnet_test_name, nemo_test_dir)
+    for nemo, espnet in zip(nemo_data_names, espnet_data_names):
+        nemo_manifest_dir = manifests_dir / nemo
+        nemo_wav_dir = wav_dir / nemo
+        
+        nemo_manifest_dir.mkdir(parents=True, exist_ok=True)
+        nemo_wav_dir.mkdir(parents=True, exist_ok=True)
 
+        # convert
+        make_nemo_dump(espnet_dump_dir, nemo_wav_dir, espnet, nemo_manifest_dir)
+
+    logging.info("finished")
 
 if __name__ == "__main__":
     main()
