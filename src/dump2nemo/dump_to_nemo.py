@@ -4,13 +4,9 @@ import argparse
 import shutil
 from pathlib import Path
 import soundfile
-import logging
+from loguru import logger
 from tqdm import tqdm
 from joblib import Parallel, delayed
-
-logging.basicConfig(
-    level=logging.INFO, format="%(asctime)s:%(levelname)s:[%(filename)s] %(message)s"
-)
 
 """
 e.g. 
@@ -76,10 +72,13 @@ def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, outpu
     """
     NeMoを学習させるためのdumpファイルを作成します．
     """
-
+    
     espnet_dump_dir = Path(espnet_dump_dir)
     text_path = espnet_dump_dir / f"raw/{data_name}/text"
     wavscp_path = espnet_dump_dir / f"raw/{data_name}/wav.scp"
+
+    # espnet のTag機能のため
+    data_name = data_name.replace("/", "_")
     output_json = Path(output_dir) / f"{data_name}_manifest.json/"
     nemo_wav_dir = Path(nemo_wav_dir)
 
@@ -87,19 +86,19 @@ def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, outpu
     assert wavscp_path.exists(), f"{wavscp_path.exists()} does not exist"
 
     # textのdictを作成
-    logging.info("read text file with parallel")
+    logger.info("read text file with parallel")
     with open(text_path) as f_text:
         # multi process
         text_dicts = Parallel(n_jobs=job_num)(
-                delayed(make_text_dict)(line) for line in tqdm(f_text.readlines(), leave=True)
+                delayed(make_text_dict)(line) for line in tqdm(f_text.readlines(), leave=False)
         )
         text_dicts = dict(text_dicts)
 
-    logging.info("read wav.scp file with parallel")
+    logger.info("read wav.scp file with parallel")
     with open(wavscp_path) as f_wavscp:
         wavscp_dicts = Parallel(n_jobs=job_num)(
             delayed(make_wavscp_dict)(line, espnet_dump_dir, nemo_wav_dir)
-            for line in tqdm(f_wavscp.readlines(), leave=True)
+            for line in tqdm(f_wavscp.readlines(), leave=False)
         )
         wavscp_dicts = dict(wavscp_dicts)
 
@@ -110,7 +109,7 @@ def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, outpu
         data.update(wavscp_dicts[id])
         dump_list.append(json.dumps(data, ensure_ascii=False)+"\n")
 
-    logging.info("finish to read files. exporting....")
+    logger.info("finish to read files. exporting....")
     with open(output_json, "a") as f_json:
         f_json.writelines(dump_list)
 
@@ -136,7 +135,7 @@ def main():
     espnet_data_names = [args.train_name, args.dev_name] + args.test_name
 
     for espnet in espnet_data_names:
-        logging.info(f"start format {espnet}")
+        logger.info(f"start format {espnet}")
         nemo_manifest_dir = manifests_dir / espnet
         nemo_wav_dir = wav_dir / espnet
         
@@ -146,7 +145,7 @@ def main():
         # convert
         make_nemo_dump(espnet_dump_dir, nemo_wav_dir, espnet, nemo_manifest_dir, nj)
 
-    logging.info("finished")
+    logger.info("finished")
 
 if __name__ == "__main__":
     main()
