@@ -14,20 +14,20 @@ logging.basicConfig(
 
 """
 e.g. 
-python dump_to_nemo.py --espnet-dump-dir path/to/dir --train-name train_sp --dev-name dev --test-name test
+python dump_to_nemo.py --espnet-dump-dir path/to/dir --nemo-wav-dir path/to/wav --manifest-dir path/to/manifest --train-name train_sp --dev-name dev --test-name test
 """
 
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("formatter from espnet dump to nemo dump")
+
     parser.add_argument("--espnet-dump-dir")
     parser.add_argument("--nemo-wav-dir", default="nemo_wav")
     parser.add_argument("--manifests-dir", default="manifests")
-
     parser.add_argument("--train-name", default="train_sp")
     parser.add_argument("--dev-name", default="dev1")
-    parser.add_argument("--test-name", default="test")
-
+    parser.add_argument("--test-name", default="test", nargs='+')
+    parser.add_argument("--num_job", type=int, default=-1)
     args = parser.parse_args()
     return args
 
@@ -72,7 +72,7 @@ def make_wavscp_dict(line: str, espnet_dump_dir: Path, nemo_wav_dir: Path):
     return id, ext_dict
 
 
-def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, output_dir: str):
+def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, output_dir: str, job_num: int):
     """
     NeMoを学習させるためのdumpファイルを作成します．
     """
@@ -90,16 +90,16 @@ def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, outpu
     logging.info("read text file with parallel")
     with open(text_path) as f_text:
         # multi process
-        text_dicts = Parallel(n_jobs=-1)(
-                delayed(make_text_dict)(line) for line in tqdm(f_text.readlines())
+        text_dicts = Parallel(n_jobs=job_num)(
+                delayed(make_text_dict)(line) for line in tqdm(f_text.readlines(), leave=True)
         )
         text_dicts = dict(text_dicts)
 
     logging.info("read wav.scp file with parallel")
     with open(wavscp_path) as f_wavscp:
-        wavscp_dicts = Parallel(n_jobs=-1)(
+        wavscp_dicts = Parallel(n_jobs=job_num)(
             delayed(make_wavscp_dict)(line, espnet_dump_dir, nemo_wav_dir)
-            for line in tqdm(f_wavscp.readlines())
+            for line in tqdm(f_wavscp.readlines(), leave=True)
         )
         wavscp_dicts = dict(wavscp_dicts)
 
@@ -122,6 +122,7 @@ def main():
     espnet_dump_dir = Path(args.espnet_dump_dir)
     wav_dir = Path(args.nemo_wav_dir)
     manifests_dir = Path(args.manifests_dir)
+    nj = args.num_job
 
     # ディレクトリ準備
     if manifests_dir.exists():
@@ -132,18 +133,18 @@ def main():
     wav_dir.mkdir(parents=True)
 
     # convert処理
-    nemo_data_names = ["train", "dev", "test"]
-    espnet_data_names = [args.train_name, args.dev_name, args.test_name]
+    espnet_data_names = [args.train_name, args.dev_name] + args.test_name
 
-    for nemo, espnet in zip(nemo_data_names, espnet_data_names):
-        nemo_manifest_dir = manifests_dir / nemo
-        nemo_wav_dir = wav_dir / nemo
+    for espnet in espnet_data_names:
+        logging.info(f"start format {espnet}")
+        nemo_manifest_dir = manifests_dir / espnet
+        nemo_wav_dir = wav_dir / espnet
         
         nemo_manifest_dir.mkdir(parents=True, exist_ok=True)
         nemo_wav_dir.mkdir(parents=True, exist_ok=True)
 
         # convert
-        make_nemo_dump(espnet_dump_dir, nemo_wav_dir, espnet, nemo_manifest_dir)
+        make_nemo_dump(espnet_dump_dir, nemo_wav_dir, espnet, nemo_manifest_dir, nj)
 
     logging.info("finished")
 
