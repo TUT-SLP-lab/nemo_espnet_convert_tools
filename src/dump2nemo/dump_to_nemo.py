@@ -1,28 +1,24 @@
+import argparse
 import json
 import os
-import argparse
 import shutil
 from pathlib import Path
+
 import soundfile
+from joblib import Parallel, delayed
 from loguru import logger
 from tqdm import tqdm
-from joblib import Parallel, delayed
-
-"""
-e.g. 
-python dump_to_nemo.py --espnet-dump-dir path/to/dir --nemo-wav-dir path/to/wav --manifest-dir path/to/manifest --train-name train_sp --dev-name dev --test-name test
-"""
 
 
 def get_args() -> argparse.Namespace:
     parser = argparse.ArgumentParser("formatter from espnet dump to nemo dump")
 
-    parser.add_argument("--espnet-dump-dir")
+    parser.add_argument("--espnet-dump-dir", required=True)
     parser.add_argument("--nemo-wav-dir", default="nemo_wav")
     parser.add_argument("--manifests-dir", default="manifests")
     parser.add_argument("--train-name", default="train_sp")
     parser.add_argument("--dev-name", default="dev1")
-    parser.add_argument("--test-name", default="test", nargs='+')
+    parser.add_argument("--test-name", default="test", nargs="+")
     parser.add_argument("--num_job", type=int, default=-1)
     args = parser.parse_args()
     return args
@@ -33,6 +29,7 @@ def make_text_dict(line: str):
     textの情報を持った辞書型配列を作る
     並列処理
     """
+
     id_text = line.strip().split(" ")
     id = id_text[0]
     text = id_text[1]
@@ -44,6 +41,7 @@ def make_wavscp_dict(line: str, espnet_dump_dir: Path, nemo_wav_dir: Path):
     wav.scpの情報を持った辞書型配列を作る
     並列処理
     """
+
     id_path = line.strip().split(" ")
     id = id_path[0]
     path = id_path[1]
@@ -56,8 +54,8 @@ def make_wavscp_dict(line: str, espnet_dump_dir: Path, nemo_wav_dir: Path):
 
     # fileの置き換え (nemoではwavしか受け付けない)
     dirs = str(audio_path).split("/")
-    parent = dirs[-2] # format.*
-    filename:str = dirs[-1] # A01F0019_0047680_0054321.flac
+    parent = dirs[-2]  # format.*
+    filename: str = dirs[-1]  # A01F0019_0047680_0054321.flac
     filename.replace(".flac", ".wav")
     dist_dir = nemo_wav_dir / parent
     dist_dir.mkdir(exist_ok=True)
@@ -68,11 +66,11 @@ def make_wavscp_dict(line: str, espnet_dump_dir: Path, nemo_wav_dir: Path):
     return id, ext_dict
 
 
-def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, output_dir: str, job_num: int):
+def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir: str, data_name: str, output_dir: str, job_num: int):
     """
     NeMoを学習させるためのdumpファイルを作成します．
     """
-    
+
     espnet_dump_dir = Path(espnet_dump_dir)
     text_path = espnet_dump_dir / f"raw/{data_name}/text"
     wavscp_path = espnet_dump_dir / f"raw/{data_name}/wav.scp"
@@ -90,7 +88,7 @@ def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, outpu
     with open(text_path) as f_text:
         # multi process
         text_dicts = Parallel(n_jobs=job_num)(
-                delayed(make_text_dict)(line) for line in tqdm(f_text.readlines(), leave=False)
+            delayed(make_text_dict)(line) for line in tqdm(f_text.readlines(), leave=False)
         )
         text_dicts = dict(text_dicts)
 
@@ -107,7 +105,7 @@ def make_nemo_dump(espnet_dump_dir: str, nemo_wav_dir:str ,data_name: str, outpu
     for id, data in text_dicts.items():
         assert id in wavscp_dicts, f"{id} doesn't exist in text file!!!"
         data.update(wavscp_dicts[id])
-        dump_list.append(json.dumps(data, ensure_ascii=False)+"\n")
+        dump_list.append(json.dumps(data, ensure_ascii=False) + "\n")
 
     logger.info("finish to read files. exporting....")
     with open(output_json, "a") as f_json:
@@ -138,7 +136,7 @@ def main():
         logger.info(f"start format {espnet}")
         nemo_manifest_dir = manifests_dir / espnet
         nemo_wav_dir = wav_dir / espnet
-        
+
         nemo_manifest_dir.mkdir(parents=True, exist_ok=True)
         nemo_wav_dir.mkdir(parents=True, exist_ok=True)
 
@@ -146,6 +144,7 @@ def main():
         make_nemo_dump(espnet_dump_dir, nemo_wav_dir, espnet, nemo_manifest_dir, nj)
 
     logger.info("finished")
+
 
 if __name__ == "__main__":
     main()
