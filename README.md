@@ -9,3 +9,5 @@ pip install -r requirements.txt
 ```sh
 python dump_to_nemo.py --espnet-dump-dir path/to/dir --nemo-wav-dir path/to/wav --manifest-dir path/to/manifest --train-name train_sp --dev-name dev --test-name test
 ```
+
+If you need include speaker id to manifest file, use `--with-speaker-id` flag.

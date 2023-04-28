@@ -99,8 +99,8 @@ def make_nemo_dump(
 
     espnet_dump_dir = Path(espnet_dump_dir)
     text_path = espnet_dump_dir / "raw" / data_name / "text"
-    wavscp_path = espnet_dump_dir / "raw" / {data_name} / "wav.scp"
-    utt_to_spk_path = espnet_dump_dir / "raw" / {data_name} / "utt2spk"
+    wavscp_path = espnet_dump_dir / "raw" / data_name / "wav.scp"
+    utt_to_spk_path = espnet_dump_dir / "raw" / data_name / "utt2spk"
 
     # espnet のTag機能のため
     data_name = data_name.replace("/", "_")
@@ -133,11 +133,10 @@ def make_nemo_dump(
         logger.info("read utt2spk file with parallel")
         with open(utt_to_spk_path) as f_spk_to_txt:
             utt_to_spk_dicts = Parallel(n_jobs=job_num)(
-                delayed(make_speaker_dict)(line, espnet_dump_dir, nemo_wav_dir)
-                for line in tqdm(f_spk_to_txt.readlines(), leave=False)
+                delayed(make_speaker_dict)(line) for line in tqdm(f_spk_to_txt.readlines(), leave=False)
             )
             utt_to_spk_dicts = dict(utt_to_spk_dicts)
-        spk_to_txt_dict = convert_text_id_to_number_iud(utt_to_spk_dicts)
+        spk_to_txt_dict = convert_text_id_to_number_iud(utt_to_spk_dicts, "speaker_id")
 
     # 集計
     dump_list = []
