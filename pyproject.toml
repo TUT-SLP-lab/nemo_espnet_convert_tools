@@ -1,0 +1,32 @@
+[tool.poetry]
+name = "nemo-espnet-convert-tools"
+version = "0.1.0"
+description = ""
+authors = ["Your Name <you@example.com>"]
+readme = "README.md"
+packages = [{include = "nemo_espnet_convert_tools"}]
+
+[tool.poetry.dependencies]
+python = ">=3.8.1,<4.0"
+loguru = "^0.7.0"
+soundfile = "^0.12.1"
+joblib = "^1.2.0"
+
+[tool.poetry.group.dev.dependencies]
+black = "^23.3.0"
+isort = "^5.12.0"
+pyproject-flake8 = "^6.0.0.post1"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.black]
+line-length = 119
+target-version = ["py38"]
+
+[tool.flake8]
+max-line-length = 119
+
+[tool.isort]
+profile = "black"
