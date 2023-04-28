@@ -11,6 +11,8 @@ python = ">=3.8.1,<4.0"
 loguru = "^0.7.0"
 soundfile = "^0.12.1"
 joblib = "^1.2.0"
+tqdm = "^4.65.0"
+numpy = "^1.24.3"
 
 [tool.poetry.group.dev.dependencies]
 black = "^23.3.0"
