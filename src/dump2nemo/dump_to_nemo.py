@@ -57,10 +57,9 @@ def make_wavscp_dict(line: str, espnet_dump_dir: Path, nemo_wav_dir: Path):
     dirs = str(audio_path).split("/")
     parent = dirs[-2]  # format.*
     filename: str = dirs[-1]  # A01F0019_0047680_0054321.flac
-    filename.replace(".flac", ".wav")
     dist_dir = nemo_wav_dir / parent
     dist_dir.mkdir(exist_ok=True)
-    new_audio_path = dist_dir / filename
+    new_audio_path = dist_dir / filename.replace(".flac", ".wav")
     soundfile.write(str(new_audio_path), data, sr)
 
     ext_dict = {"audio_filepath": str(new_audio_path), "duration": duration}
